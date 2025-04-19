@@ -10,6 +10,10 @@ env:
   VCPKG_OVERLAY_PORTS: "${{ github.workspace }}/res/vcpkg"
   # 禁用遥测
   VCPKG_DISABLE_METRICS: "1"
+  # 添加项目版本号环境变量
+  APP_VERSION: "1.0.0"
+  # 添加输出目录
+  ARTIFACTS_DIR: "artifacts"
 
 on:
   workflow_dispatch:
@@ -148,6 +152,145 @@ jobs:
         command: build
         args: --locked --target=${{ matrix.job.target }}
 
+    - name: Build Release Version
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --locked --target=${{ matrix.job.target }} --release
+
+    # 新增 MSI 构建步骤 
+    - name: Setup WiX Toolset
+      if: matrix.job.os == 'windows-2022'
+      run: |
+        # 下载并安装最新的 WiX Toolset
+        $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311.exe"
+        $wixInstaller = "$env:TEMP\wix311.exe"
+        Invoke-WebRequest -Uri $wixUrl -OutFile $wixInstaller
+        Start-Process -FilePath $wixInstaller -ArgumentList "/install","/quiet" -Wait
+        # 添加 WiX bin 目录到 PATH
+        echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
+      shell: pwsh
+
+    - name: Prepare MSI Build
+      if: matrix.job.os == 'windows-2022'
+      run: |
+        # 创建输出目录
+        mkdir -p ${{ env.ARTIFACTS_DIR }}
+        
+        # 复制必要的文件到临时目录
+        $BUILD_DIR = "msi_build"
+        mkdir -p $BUILD_DIR
+        
+        # 复制二进制文件
+        cp target/${{ matrix.job.target }}/release/rustdesk.exe $BUILD_DIR/
+        
+        # 复制依赖文件和资源
+        cp -r res/icon.ico $BUILD_DIR/
+        
+        # 显示文件列表
+        ls -la $BUILD_DIR
+      shell: bash
+
+    - name: Build MSI Package
+      if: matrix.job.os == 'windows-2022'
+      run: |
+        # 使用项目中的 WiX 配置文件或创建一个新的
+        
+        # 方法1: 如果项目已有 WiX 配置文件
+        if [ -f "res/msi/rustdesk.wxs" ]; then
+          echo "使用现有的 WiX 配置文件"
+          
+          # 编译 WiX 源文件
+          candle.exe -arch x64 -ext WixUtilExtension \
+            -dProductVersion=${{ env.APP_VERSION }} \
+            -dBuildDir=msi_build \
+            res/msi/rustdesk.wxs
+          
+          # 链接生成 MSI
+          light.exe -ext WixUIExtension -ext WixUtilExtension \
+            -cultures:zh-cn -out ${{ env.ARTIFACTS_DIR }}/rustdesk-${{ env.APP_VERSION }}-windows_x64.msi \
+            rustdesk.wixobj
+        else
+          echo "创建新的 WiX 配置文件"
+          
+          # 创建一个基本的 WiX 配置文件
+          cat > rustdesk.wxs <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="RustDesk" Language="2052" Version="${{ env.APP_VERSION }}" 
+           Manufacturer="RustDesk Team" UpgradeCode="8363F5A0-8B78-4A52-B0E0-9CC1A6666D25">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+    
+    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 RustDesk。" />
+    <MediaTemplate EmbedCab="yes" />
+    
+    <Feature Id="ProductFeature" Title="RustDesk" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+    
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="RustDesk" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="RustDesk"/>
+      </Directory>
+    </Directory>
+    
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="*">
+        <File Id="RustDeskEXE" Source="msi_build/rustdesk.exe" KeyPath="yes" />
+        <!-- 可以在这里添加其他文件 -->
+      </Component>
+    </ComponentGroup>
+    
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="*">
+        <Shortcut Id="ApplicationStartMenuShortcut" 
+                  Name="RustDesk"
+                  Description="远程桌面工具"
+                  Target="[INSTALLFOLDER]rustdesk.exe"
+                  WorkingDirectory="INSTALLFOLDER"/>
+        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\RustDesk" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+    
+    <UIRef Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+  </Product>
+</Wix>
+EOF
+          
+          # 创建简单的许可证文件
+          cat > license.rtf <<EOF
+{\rtf1\ansi\ansicpg936\deff0\nouicompat\deflang1033\deflangfe2052{\fonttbl{\f0\fnil\fcharset0 Calibri;}}
+{\*\generator Riched20 10.0.19041}\viewkind4\uc1 
+\pard\sa200\sl276\slmult1\f0\fs22\lang9 RustDesk 许可协议\par
+版权所有 (c) RustDesk Team\par
+此软件为自由软件，可以按照相应的协议使用和分发。\par
+}
+EOF
+          
+          # 编译 WiX 源文件
+          candle.exe -arch x64 -ext WixUtilExtension rustdesk.wxs
+          
+          # 链接生成 MSI
+          light.exe -ext WixUIExtension -ext WixUtilExtension \
+            -cultures:zh-cn -out ${{ env.ARTIFACTS_DIR }}/rustdesk-${{ env.APP_VERSION }}-windows_x64.msi \
+            rustdesk.wixobj
+        fi
+      shell: bash
+
+    - name: Upload MSI Artifact
+      if: matrix.job.os == 'windows-2022'
+      uses: actions/upload-artifact@v3
+      with:
+        name: rustdesk-windows-msi
+        path: ${{ env.ARTIFACTS_DIR }}/*.msi
+        if-no-files-found: error
+
     - name: clean
       shell: bash
       run: |
@@ -205,3 +348,4 @@ jobs:
         # use-cross: ${{ matrix.job.use-cross }} # Windows 不需要 cross
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
+
