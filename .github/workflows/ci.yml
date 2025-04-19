@@ -125,17 +125,18 @@ jobs:
             vcpkgDirectory: /opt/artifacts/vcpkg
             vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-        - name: Install vcpkg dependencies
-          run: |
-            $VCPKG_ROOT/vcpkg install # 移除这里的包名参数，vcpkg 会自动读取 vcpkg.json
-          shell: bash
-
+         - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install # 移除这里的包名参数，vcpkg 会自动读取 vcpkg.json
+        shell: bash
+  
         - name: Install Rust toolchain
-          uses: dtolnay/rust-toolchain@v1
-          with:
-        toolchain: stable
-        targets: ${{ matrix.job.target }}
-        components: ''
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.job.target }} # 使用 matrix 变量更灵活
+          components: ''
+        # 移除了不必要的 shell: 和 env:
 
     - name: Show version information (Rust, cargo, GCC)
       shell: bash
