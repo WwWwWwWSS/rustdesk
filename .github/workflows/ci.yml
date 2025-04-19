@@ -72,7 +72,17 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
+          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
+          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
+          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
+          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
+          # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
+          # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
+          # - { target: x86_64-pc-windows-msvc      , os: windows-2022                  }
+          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-22.04                  }
+          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
     - name: Export GitHub Actions cache environment variables
       uses: actions/github-script@v6
@@ -119,24 +129,23 @@ jobs:
           # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
         esac
 
-        - name: Setup vcpkg with Github Actions binary cache
-          uses: lukka/run-vcpkg@v11
-          with:
-            vcpkgDirectory: /opt/artifacts/vcpkg
-            vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+    - name: Setup vcpkg with Github Actions binary cache
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: /opt/artifacts/vcpkg
+        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-         - name: Install vcpkg dependencies
-        run: |
-          $VCPKG_ROOT/vcpkg install # 移除这里的包名参数，vcpkg 会自动读取 vcpkg.json
-        shell: bash
-  
-        - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
-        with:
-          toolchain: stable
-          targets: ${{ matrix.job.target }} # 使用 matrix 变量更灵活
-          components: ''
-        # 移除了不必要的 shell: 和 env:
+    - name: Install vcpkg dependencies
+      run: |
+        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+      shell: bash
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: stable
+        targets: ${{ matrix.job.target }}
+        components: ''
 
     - name: Show version information (Rust, cargo, GCC)
       shell: bash
