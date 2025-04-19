@@ -99,7 +99,17 @@ jobs:
 
     - name: Install vcpkg dependencies
       run: |
-        $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed"
+        # 针对 Windows MSVC 明确安装所需依赖
+        if [[ "${{ matrix.job.target }}" == *-pc-windows-* ]]; then
+          ARCH="x64-windows-static"
+          if [[ "${{ matrix.job.target }}" == "i686-pc-windows-"* ]]; then
+            ARCH="x86-windows-static"
+          fi
+          $VCPKG_ROOT/vcpkg install opus:${ARCH} libvpx:${ARCH} libyuv:${ARCH} --x-install-root="$VCPKG_ROOT/installed"
+        else
+          # 为其他平台安装依赖
+          $VCPKG_ROOT/vcpkg install opus:${{ matrix.job.target }} libvpx:${{ matrix.job.target }} libyuv:${{ matrix.job.target }} --x-install-root="$VCPKG_ROOT/installed"
+        fi
       shell: bash
 
     - name: Install Rust toolchain
