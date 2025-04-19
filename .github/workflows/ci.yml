@@ -6,6 +6,10 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   # for multiarch gcc compatibility
   VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
+  # 设置覆盖端口路径
+  VCPKG_OVERLAY_PORTS: "${{ github.workspace }}/res/vcpkg"
+  # 禁用遥测
+  VCPKG_DISABLE_METRICS: "1"
 
 on:
   workflow_dispatch:
@@ -94,21 +98,21 @@ jobs:
     - name: Setup vcpkg with Github Actions binary cache
       uses: lukka/run-vcpkg@v11
       with:
-        vcpkgDirectory: /opt/artifacts/vcpkg
+        vcpkgDirectory: C:/vcpkg
         vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
     - name: Install vcpkg dependencies
       run: |
-        # 针对 Windows MSVC 明确安装所需依赖
-        if [[ "${{ matrix.job.target }}" == *-pc-windows-* ]]; then
-          ARCH="x64-windows-static"
-          if [[ "${{ matrix.job.target }}" == "i686-pc-windows-"* ]]; then
-            ARCH="x86-windows-static"
-          fi
-          $VCPKG_ROOT/vcpkg install opus:${ARCH} libvpx:${ARCH} libyuv:${ARCH} --x-install-root="$VCPKG_ROOT/installed"
+        # 在Windows上启用vcpkg清单模式并设置正确的路径
+        if [[ "${{ matrix.job.os }}" == windows* ]]; then
+          echo "Installing vcpkg dependencies for Windows..."
+          echo "Current workspace: ${{ github.workspace }}"
+          echo "VCPKG_ROOT: $VCPKG_ROOT"
+          
+          # 确保vcpkg能正确找到manifest文件
+          "${VCPKG_ROOT}/vcpkg" install --triplet=${{ matrix.job.target }} --overlay-ports="${{ github.workspace }}/res/vcpkg"
         else
-          # 为其他平台安装依赖
-          $VCPKG_ROOT/vcpkg install opus:${{ matrix.job.target }} libvpx:${{ matrix.job.target }} libyuv:${{ matrix.job.target }} --x-install-root="$VCPKG_ROOT/installed"
+          $VCPKG_ROOT/vcpkg install --triplet=${{ matrix.job.target }}
         fi
       shell: bash
 
