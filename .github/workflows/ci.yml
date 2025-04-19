@@ -72,17 +72,10 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { target: aarch64-unknown-linux-gnu   , os: ubuntu-20.04, use-cross: true }
-          # - { target: arm-unknown-linux-gnueabihf , os: ubuntu-20.04, use-cross: true }
-          # - { target: arm-unknown-linux-musleabihf, os: ubuntu-20.04, use-cross: true }
-          # - { target: i686-pc-windows-msvc        , os: windows-2022                  }
-          # - { target: i686-unknown-linux-gnu      , os: ubuntu-20.04, use-cross: true }
-          # - { target: i686-unknown-linux-musl     , os: ubuntu-20.04, use-cross: true }
-          # - { target: x86_64-apple-darwin         , os: macos-10.15                   }
-          # - { target: x86_64-pc-windows-gnu       , os: windows-2022                  }
-          # - { target: x86_64-pc-windows-msvc      , os: windows-2022                  }
-          - { target: x86_64-unknown-linux-gnu    , os: ubuntu-22.04                  }
-          # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
+          # 只保留 Windows 构建目标
+          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
+          # 如果需要 32 位 Windows MSVC 构建，可以取消下面一行的注释
+          # - { target: i686-pc-windows-msvc, os: windows-2022 }
     steps:
     - name: Export GitHub Actions cache environment variables
       uses: actions/github-script@v6
@@ -96,38 +89,7 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install prerequisites
-      shell: bash
-      run: |
-        case ${{ matrix.job.target }} in
-          x86_64-unknown-linux-gnu)
-            sudo apt-get -y update
-            sudo apt-get install -y \
-               clang \
-               cmake \
-               curl \
-               gcc \
-               git \
-               g++ \
-               libpam0g-dev \
-               libasound2-dev \
-               libgstreamer1.0-dev \
-               libgstreamer-plugins-base1.0-dev \
-               libgtk-3-dev \
-               libpulse-dev \
-               libva-dev \
-               libvdpau-dev \
-               libxcb-randr0-dev \
-               libxcb-shape0-dev \
-               libxcb-xfixes0-dev \
-               libxdo-dev \
-               libxfixes-dev \
-               nasm \
-               wget
-            ;;
-          # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
+    # 移除了 'Install prerequisites' 步骤，因为它只包含 Linux 命令
 
     - name: Setup vcpkg with Github Actions binary cache
       uses: lukka/run-vcpkg@v11
@@ -147,10 +109,9 @@ jobs:
         targets: ${{ matrix.job.target }}
         components: ''
 
-    - name: Show version information (Rust, cargo, GCC)
+    - name: Show version information (Rust, cargo) # 移除 GCC 因为Windows MSVC 不默认提供
       shell: bash
       run: |
-        gcc --version || true
         rustup -V
         rustup toolchain list
         rustup default
@@ -162,7 +123,7 @@ jobs:
     - name: Build
       uses: actions-rs/cargo@v1
       with:
-        use-cross: ${{ matrix.job.use-cross }}
+        # use-cross: ${{ matrix.job.use-cross }} # Windows 不需要 cross
         command: build
         args: --locked --target=${{ matrix.job.target }}
 
@@ -182,54 +143,44 @@ jobs:
     #     esac;
 
     #     # Figure out what strip tool to use if any
-    #     STRIP="strip"
-    #     case ${{ matrix.job.target }} in
-    #       arm-unknown-linux-*) STRIP="arm-linux-gnueabihf-strip" ;;
-    #       aarch64-unknown-linux-gnu) STRIP="aarch64-linux-gnu-strip" ;;
-    #       *-pc-windows-msvc) STRIP="" ;;
-    #     esac;
+    #     STRIP="" # Windows MSVC 通常不需要单独的 strip 命令
+    #     # case ${{ matrix.job.target }} in
+    #     #   *-pc-windows-msvc) STRIP="" ;; # 确认是否需要 strip
+    #     # esac;
 
     #     # Setup paths
     #     BIN_DIR="${{ env.CICD_INTERMEDIATES_DIR }}/stripped-release-bin/"
     #     mkdir -p "${BIN_DIR}"
-    #     BIN_NAME="${{ env.PROJECT_NAME }}${EXE_suffix}"
+    #     # 假设项目名称在环境变量中，或者直接硬编码 'rustdesk'
+    #     BIN_NAME="rustdesk${EXE_suffix}"
     #     BIN_PATH="${BIN_DIR}/${BIN_NAME}"
 
     #     # Copy the release build binary to the result location
+    #     # 注意 Windows 路径分隔符，但 Git Bash 通常能处理斜杠
     #     cp "target/${{ matrix.job.target }}/release/${BIN_NAME}" "${BIN_DIR}"
 
     #     # Also strip if possible
-    #     if [ -n "${STRIP}" ]; then
-    #       "${STRIP}" "${BIN_PATH}"
-    #     fi
+    #     # if [ -n "${STRIP}" ]; then
+    #     #   "${STRIP}" "${BIN_PATH}"
+    #     # fi
 
     #     # Let subsequent steps know where to find the (stripped) bin
-    #     echo ::set-output name=BIN_PATH::${BIN_PATH}
-    #     echo ::set-output name=BIN_NAME::${BIN_NAME}
+    #     echo "::set-output name=BIN_PATH::${BIN_PATH}"
+    #     echo "::set-output name=BIN_NAME::${BIN_NAME}"
 
     - name: Set testing options
       id: test-options
       shell: bash
       run: |
-        # test only library unit tests and binary for arm-type targets
-        unset CARGO_TEST_OPTIONS
-
-        case ${{ matrix.job.target }} in
-          arm-* | aarch64-*)
-            CARGO_TEST_OPTIONS="--lib --bin ${PROJECT_NAME}"
-            ;;
-          *)
-            CARGO_TEST_OPTIONS="--workspace --no-fail-fast -- --skip test_get_cursor_pos --skip test_get_key_state"
-            ;;
-        esac;
-
-        #deprecated echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        # Windows testing options (可以根据需要调整)
+        CARGO_TEST_OPTIONS="--workspace --no-fail-fast" # 移除了 Linux 特有的 skip
+        # echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS} # deprecated
         echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_ENV
         echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
 
     - name: Run tests
       uses: actions-rs/cargo@v1
       with:
-        use-cross: ${{ matrix.job.use-cross }}
+        # use-cross: ${{ matrix.job.use-cross }} # Windows 不需要 cross
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
