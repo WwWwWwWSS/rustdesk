@@ -1,0 +1,15 @@
+    {
+      "name": "your-project-name", // 替换成你的项目名称
+      "version-string": "1.0.0",  // 可以使用你项目的版本号
+      "dependencies": [
+        // ... 可能存在的其他依赖 ...
+        "libvpx",
+        "libyuv",
+        "opus",
+        "aom"
+        // ... 其他依赖 ...
+      ]
+      // 你可能还需要为静态链接指定特性或 triplet，但这取决于你的 vcpkg 设置和需求。
+      // 例如，如果默认 triplet 不是 x64-windows-static，你可能需要更详细的配置。
+      // 但根据你的脚本，vcpkg 应该能自动处理 triplet。
+    }
