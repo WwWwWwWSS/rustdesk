@@ -114,17 +114,45 @@ jobs:
           echo "VCPKG_ROOT: $VCPKG_ROOT"
           
           # 使用正确的vcpkg triplet格式而非Rust目标格式
-          # 将x86_64-pc-windows-msvc映射到x64-windows
-          VCPKG_TRIPLET="x64-windows"
+          # 将x86_64-pc-windows-msvc映射到x64-windows-static（改用static版本）
+          VCPKG_TRIPLET="x64-windows-static"
           if [[ "${{ matrix.job.target }}" == "i686-pc-windows-msvc" ]]; then
-            VCPKG_TRIPLET="x86-windows"
+            VCPKG_TRIPLET="x86-windows-static"
           fi
           
           echo "使用vcpkg triplet: ${VCPKG_TRIPLET}"
-          "${VCPKG_ROOT}/vcpkg" install --triplet=${VCPKG_TRIPLET} --overlay-ports="${{ github.workspace }}/res/vcpkg"
+          
+          # 确保环境变量正确设置
+          export VCPKG_DEFAULT_TRIPLET=${VCPKG_TRIPLET}
+          
+          # 使用verbose输出以便调试
+          "${VCPKG_ROOT}/vcpkg" install opus libvpx libyuv --triplet=${VCPKG_TRIPLET} --overlay-ports="${{ github.workspace }}/res/vcpkg" --verbose
+          
+          # 列出已安装的库和头文件，便于调试
+          echo "检查已安装的库文件:"
+          ls -la "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET}/lib/"
+          
+          echo "检查opus头文件:"
+          ls -la "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET}/include/opus/" || echo "opus目录不存在"
+          
+          echo "检查vpx头文件:"
+          ls -la "${VCPKG_ROOT}/installed/${VCPKG_TRIPLET}/include/vpx/" || echo "vpx目录不存在"
         else
           $VCPKG_ROOT/vcpkg install --triplet=${{ matrix.job.target }}
         fi
+      shell: bash
+
+    # 添加环境变量设置步骤，确保构建时能找到头文件
+    - name: Setup Build Environment
+      if: matrix.job.os == 'windows-2022'
+      run: |
+        # 设置环境变量
+        echo "VCPKG_ROOT=$VCPKG_ROOT" >> $GITHUB_ENV
+        echo "INCLUDE=${VCPKG_ROOT}/installed/x64-windows-static/include;$INCLUDE" >> $GITHUB_ENV
+        echo "LIB=${VCPKG_ROOT}/installed/x64-windows-static/lib;$LIB" >> $GITHUB_ENV
+        
+        # 为Rust构建设置环境变量
+        echo "RUSTFLAGS=-L ${VCPKG_ROOT}/installed/x64-windows-static/lib" >> $GITHUB_ENV
       shell: bash
 
     - name: Install Rust toolchain
@@ -348,4 +376,3 @@ EOF
         # use-cross: ${{ matrix.job.use-cross }} # Windows 不需要 cross
         command: test
         args: --locked --target=${{ matrix.job.target }} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}}
-
