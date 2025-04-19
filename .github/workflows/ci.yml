@@ -119,20 +119,20 @@ jobs:
           # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
         esac
 
-    - name: Setup vcpkg with Github Actions binary cache
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgDirectory: /opt/artifacts/vcpkg
-        vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+        - name: Setup vcpkg with Github Actions binary cache
+          uses: lukka/run-vcpkg@v11
+          with:
+            vcpkgDirectory: /opt/artifacts/vcpkg
+            vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
 
-    - name: Install vcpkg dependencies
-      run: |
-        $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-      shell: bash
+        - name: Install vcpkg dependencies
+          run: |
+            $VCPKG_ROOT/vcpkg install # 移除这里的包名参数，vcpkg 会自动读取 vcpkg.json
+          shell: bash
 
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@v1
-      with:
+        - name: Install Rust toolchain
+          uses: dtolnay/rust-toolchain@v1
+          with:
         toolchain: stable
         targets: ${{ matrix.job.target }}
         components: ''
